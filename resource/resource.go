@@ -1,31 +1,32 @@
 package resource
 
 import (
-	"../api"
-	"../model"
-	"../retriever"
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
+	"github.com/guilex/social-stats-aggregator/api"
+	"github.com/guilex/social-stats-aggregator/model"
+	"github.com/guilex/social-stats-aggregator/retriever"
 	"github.com/jinzhu/gorm"
 	"net/http"
+	"strconv"
 	"time"
 )
 
-type StatResource struct {
-	Db gorm.DB
-}
-
-type GetStatForm struct {
-	Url      string `form:"url" binding:"required"`
-	Provider string `form:"provider"`
+type IndexStatForm struct {
+	Id       []string `form:"id[]" binding:"required"`
+	Provider string   `form:"provider" binding:"required"`
 }
 
 type StoreStatForm struct {
 	Url      string `form:"url" binding:"required"`
 	Provider string `form:"provider" binding:"required"`
+}
+
+type StatResource struct {
+	Db gorm.DB
 }
 
 func (resource *StatResource) BatchUpdate(interval int) {
@@ -46,60 +47,70 @@ func (resource *StatResource) BatchUpdate(interval int) {
 
 func (resource *StatResource) update(s model.Stat) {
 
-	if s.Provider == "facebook" {
+	provider, _ := retriever.Make(s.Provider)
 
-		facebookRetriever := retriever.Facebook{}
+	likes := provider.GetCount(s.Url)
 
-		likes := facebookRetriever.GetLikes(s.Url)
-
-		if s.Count != likes {
-			s.Count = likes
-			s.UpdatedAt = time.Now()
-			s.Interval = resetInterval()
-		} else {
-			s.Interval = degradeInterval(s.Interval)
-		}
-
-		fmt.Println("\v", s)
-
-		resource.Db.Save(&s)
+	if s.Count != likes {
+		s.Count = likes
+		s.UpdatedAt = time.Now()
+		s.Interval = resetInterval()
+	} else {
+		s.Interval = degradeInterval(s.Interval)
 	}
+
+	fmt.Println("\v", s)
+
+	resource.Db.Save(&s)
 }
 
-func (resource *StatResource) Get(c *gin.Context) {
+func (resource *StatResource) Index(c *gin.Context) {
 
 	resource.Db.LogMode(true)
 
 	c.Request.ParseForm()
 
-	var form GetStatForm
+	var form IndexStatForm
 
-	c.BindWith(&form, binding.Form)
+	if c.BindWith(&form, binding.Form) {
 
-	urlHash := getMD5Hash(form.Url)
+		var stats struct {
+			Data []model.Stat `json:"data"`
+		}
 
-	var stats struct {
-		Data []model.Stat
-	}
+		resource.Db.Where("provider = ? AND id IN (?)", form.Provider, form.Id).Find(&stats.Data)
 
-	fmt.Println("\v", form)
+		if len(stats.Data) == 0 {
 
-	query := resource.Db.Where("provider = ? and urlhash = ?", form.Provider, urlHash)
+			c.JSON(http.StatusNotFound, api.NewError("404 Not Found"))
 
-	if form.Provider == "" {
+		} else {
 
-		query = resource.Db.Where("urlhash = ?", urlHash)
+			c.JSON(http.StatusOK, stats)
 
-	}
-
-	if query.Find(&stats.Data).RecordNotFound() {
-
-		c.JSON(http.StatusNotFound, api.NewError("404 Not Found"))
+		}
 
 	} else {
 
-		c.JSON(http.StatusOK, stats)
+		c.JSON(http.StatusBadRequest, api.NewError("400 Bad Request"))
 
+	}
+}
+
+func (resource *StatResource) Show(c *gin.Context) {
+
+	idString := c.Params.ByName("id")
+
+	id, _ := strconv.Atoi(idString)
+
+	fmt.Println("\v", id)
+
+	var stat model.Stat
+
+	if resource.Db.Where("id = ?", id).Find(&stat).RecordNotFound() {
+		c.JSON(http.StatusNotFound, api.NewError("404 Not Found"))
+	} else {
+		c.JSON(http.StatusOK, stat)
 	}
 }
 
@@ -125,14 +136,14 @@ func (resource *StatResource) Store(c *gin.Context) {
 
 	} else {
 
-		facebookRetriever := retriever.Facebook{}
+		provider, _ := retriever.Make(form.Provider)
 
-		likes := facebookRetriever.GetLikes(form.Url)
+		count := provider.GetCount(form.Url)
 
 		var stat model.Stat
 		stat.Url = form.Url
 		stat.Urlhash = urlHash
-		stat.Count = likes
+		stat.Count = count
 		stat.Interval = 1
 		stat.Provider = form.Provider
 		stat.CreatedAt = time.Now()

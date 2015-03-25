@@ -1,9 +1,9 @@
 package service
 
 import (
-	"../model"
-	"../resource"
 	"github.com/gin-gonic/gin"
+	"github.com/guilex/social-stats-aggregator/model"
+	"github.com/guilex/social-stats-aggregator/resource"
 	"github.com/jinzhu/gorm"
 	_ "github.com/mattn/go-sqlite3"
 	"net/http"
@@ -63,7 +63,9 @@ func (s *StatService) Run(config Config) error {
 
 	r.POST("/stats", statResource.Store)
 
-	r.GET("/stats", statResource.Get)
+	r.GET("/stats", statResource.Index)
+
+	r.GET("/stats/:id", statResource.Show)
 
 	r.GET("/ping", func(c *gin.Context) {
 		c.String(http.StatusOK, "pong")

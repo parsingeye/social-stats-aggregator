@@ -1,9 +1,9 @@
 package main
 
 import (
-	"./service"
 	"errors"
 	"github.com/codegangsta/cli"
+	"github.com/guilex/social-stats-aggregator/service"
 	"gopkg.in/yaml.v1"
 	"io/ioutil"
 	"log"
@@ -11,7 +11,9 @@ import (
 )
 
 func getConfig(c *cli.Context) (service.Config, error) {
+
 	yamlPath := c.GlobalString("config")
+
 	config := service.Config{}
 
 	if _, err := os.Stat(yamlPath); err != nil {
