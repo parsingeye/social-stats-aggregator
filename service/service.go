@@ -17,7 +17,7 @@ type StatService struct {
 }
 
 func (s *StatService) getDb(config Config) (gorm.DB, error) {
-	return gorm.Open("sqlite3", "/Users/dragan/Sites/gotest/gorm.db")
+	return gorm.Open("sqlite3", "dbdata/gorm.db")
 }
 
 func (s *StatService) Migrate(config Config) error {
